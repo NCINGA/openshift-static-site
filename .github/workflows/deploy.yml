@@ -1,0 +1,43 @@
+name: Deploy to GCP VM
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    name: Deploy static site
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Copy files to VM
+        run: |
+          gcloud compute scp --recurse \
+            --zone="${{ secrets.GCP_VM_ZONE }}" \
+            --quiet \
+            index.html \
+            ${{ secrets.GCP_VM_NAME }}:/var/www/ncinga/html/
+
+      - name: Reload web server
+        run: |
+          gcloud compute ssh ${{ secrets.GCP_VM_NAME }} \
+            --zone="${{ secrets.GCP_VM_ZONE }}" \
+            --quiet \
+            --command="systemctl reload nginx || systemctl reload apache2 || true"
